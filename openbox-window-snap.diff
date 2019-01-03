@@ -1,0 +1,98 @@
+diff --git a/openbox/client.h b/openbox/client.h
+index 11a01400..a69c25ec 100644
+--- a/openbox/client.h
++++ b/openbox/client.h
+@@ -268,6 +268,10 @@ struct _ObClient
+     gboolean max_vert;
+     /*! The window is maximized to fill the screen horizontally */
+     gboolean max_horz;
++    /*! The window is snapped to fill the left side of the screen */
++    gboolean snapped_left;
++    /*! The window is snapped to fill the right side of the screen */
++    gboolean snapped_right;
+     /*! The window should not be displayed by pagers */
+     gboolean skip_pager;
+     /*! The window should not be displayed by taskbars */
+diff --git a/openbox/moveresize.c b/openbox/moveresize.c
+index d12a64de..1a2c40b3 100644
+--- a/openbox/moveresize.c
++++ b/openbox/moveresize.c
+@@ -372,7 +372,7 @@ void moveresize_end(gboolean cancel)
+ 
+ static void do_move(gboolean keyboard, gint keydist)
+ {
+-    gint resist;
++    gint resist, x, y;
+ 
+     if (keyboard) resist = keydist - 1; /* resist for one key press */
+     else resist = config_resist_win;
+@@ -380,6 +380,69 @@ static void do_move(gboolean keyboard, gint keydist)
+     if (!keyboard) resist = config_resist_edge;
+     resist_move_monitors(moveresize_client, resist, &cur_x, &cur_y);
+ 
++    screen_pointer_pos(&x, &y);
++
++    const Rect *a = screen_physical_area_active();
++    gint height = RECT_BOTTOM(*a) - RECT_TOP(*a);
++    gint width = RECT_RIGHT(*a) - RECT_LEFT(*a);
++
++    if (moveresize_client->max_horz && moveresize_client->max_vert && y > 0)
++    {
++        client_maximize(moveresize_client, FALSE, 0);
++        start_cx = 0;
++        start_cy = 0;
++        start_x = ((x - cur_x) * moveresize_client->area.width) / cur_w;
++        start_y = y;
++        cur_x = x - start_x;
++        cur_y = y - start_y;
++        cur_w = moveresize_client->area.width;
++        cur_h = moveresize_client->area.height;
++    }
++    else if (y == 0 && !moveresize_client->snapped_left && !moveresize_client->snapped_right) {
++        client_maximize(moveresize_client, TRUE, 0);
++    }
++    else if (x == 0 && !moveresize_client->snapped_left && !moveresize_client->max_horz && !moveresize_client->max_vert) {
++        moveresize_client->pre_max_area.x = cur_x;
++        moveresize_client->pre_max_area.y = cur_y;
++        moveresize_client->pre_max_area.width = cur_w;
++        moveresize_client->pre_max_area.height = cur_h;
++        moveresize_client->snapped_left = TRUE;
++    }
++    else if (x > 0 && moveresize_client->snapped_left && !moveresize_client->max_horz && !moveresize_client->max_vert) {
++        cur_x = moveresize_client->pre_max_area.x;
++        cur_y = moveresize_client->pre_max_area.y;
++        cur_w = moveresize_client->pre_max_area.width;
++        cur_h = moveresize_client->pre_max_area.height;
++        moveresize_client->snapped_left = FALSE;
++    }
++    else if (x == width && !moveresize_client->snapped_right && !moveresize_client->max_horz && !moveresize_client->max_vert) {
++        moveresize_client->pre_max_area.x = cur_x;
++        moveresize_client->pre_max_area.y = cur_y;
++        moveresize_client->pre_max_area.width = cur_w;
++        moveresize_client->pre_max_area.height = cur_h;
++        moveresize_client->snapped_right = TRUE;
++    }
++    else if (x < width && moveresize_client->snapped_right && !moveresize_client->max_horz && !moveresize_client->max_vert) {
++        cur_x = moveresize_client->pre_max_area.x;
++        cur_y = moveresize_client->pre_max_area.y;
++        cur_w = moveresize_client->pre_max_area.width;
++        cur_h = moveresize_client->pre_max_area.height;
++        moveresize_client->snapped_right = FALSE;
++    }
++
++    if (moveresize_client->snapped_left) {
++        cur_x = 0;
++        cur_y = 0;
++        cur_w = (width / 2) - 1;
++        cur_h = height;
++    }
++    else if (moveresize_client->snapped_right) {
++        cur_x = width / 2;
++        cur_y = 0;
++        cur_w = width / 2;
++        cur_h = height;
++    }
++
+     client_configure(moveresize_client, cur_x, cur_y, cur_w, cur_h,
+                      TRUE, FALSE, FALSE);
+     if (config_resize_popup_show == 2) /* == "Always" */
