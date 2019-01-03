@@ -14,3 +14,5 @@ git apply openbox-window-snap.diff
 ```
 
 Then build openbox according to the instructions [here.](http://openbox.org/wiki/Help:Installing)
+
+This probably won't work with multiple monitors or desktops.
